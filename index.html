@@ -92,6 +92,61 @@
         </svg>
       </section>
 
+      <section class="panel steps-panel">
+        <div class="viz-header">
+          <h2>Construction Steps</h2>
+          <span id="stepSummary">No construction yet.</span>
+        </div>
+        <div class="steps-layout">
+          <div id="stepList" class="step-list"></div>
+          <div class="step-preview">
+            <div class="step-preview-copy">
+              <h3 id="stepTitle">Step Preview</h3>
+              <p id="stepDescription">Build an automaton to inspect its construction process.</p>
+              <div id="stepActions" class="step-actions">
+                <button id="showNfaStepsBtn" class="btn primary" type="button">
+                  Show ε-NFA Steps
+                </button>
+                <button id="showDfaStepsBtn" class="btn" type="button">
+                  Show DFA Steps
+                </button>
+              </div>
+              <div id="playbackControls" class="playback-controls">
+                <button id="playStepsBtn" class="btn primary" type="button">
+                  Play Steps
+                </button>
+                <button id="stopStepsBtn" class="btn" type="button">
+                  Stop
+                </button>
+                <label class="speed-control" for="speedSelect">
+                  Speed
+                  <select id="speedSelect">
+                    <option value="1600">Slow</option>
+                    <option value="900" selected>Normal</option>
+                    <option value="450">Fast</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <svg id="stepSvg" viewBox="0 0 900 420" aria-label="Construction step graph">
+              <defs>
+                <marker
+                  id="stepArrow"
+                  markerWidth="10"
+                  markerHeight="10"
+                  refX="8"
+                  refY="3"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path class="marker-shape" d="M0,0 L0,6 L9,3 z"></path>
+                </marker>
+              </defs>
+            </svg>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <h2>Simulation Results</h2>
         <div id="results" class="results empty">No simulations yet.</div>

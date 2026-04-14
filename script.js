@@ -6,6 +6,11 @@ const state = {
   dfa: null,
   currentMachine: null,
   machineType: "-",
+  constructionSteps: [],
+  selectedStepIndex: 0,
+  playbackTimer: null,
+  playbackDelay: 900,
+  isPlaying: false,
 };
 
 const els = {
@@ -14,6 +19,11 @@ const els = {
   buildNfaBtn: document.getElementById("buildNfaBtn"),
   buildDfaBtn: document.getElementById("buildDfaBtn"),
   simulateBtn: document.getElementById("simulateBtn"),
+  showNfaStepsBtn: document.getElementById("showNfaStepsBtn"),
+  showDfaStepsBtn: document.getElementById("showDfaStepsBtn"),
+  playStepsBtn: document.getElementById("playStepsBtn"),
+  stopStepsBtn: document.getElementById("stopStepsBtn"),
+  speedSelect: document.getElementById("speedSelect"),
   status: document.getElementById("status"),
   results: document.getElementById("results"),
   graphSvg: document.getElementById("graphSvg"),
@@ -21,11 +31,53 @@ const els = {
   transitionCount: document.getElementById("transitionCount"),
   machineType: document.getElementById("machineType"),
   alphabetLabel: document.getElementById("alphabetLabel"),
+  stepList: document.getElementById("stepList"),
+  stepSvg: document.getElementById("stepSvg"),
+  stepSummary: document.getElementById("stepSummary"),
+  stepTitle: document.getElementById("stepTitle"),
+  stepDescription: document.getElementById("stepDescription"),
+  stepActions: document.getElementById("stepActions"),
+  playbackControls: document.getElementById("playbackControls"),
 };
 
 function setStatus(message, isError = false) {
   els.status.textContent = message;
   els.status.style.color = isError ? "#ab2f43" : "#355267";
+}
+
+function cloneMachine(machine) {
+  const transitions = new Map();
+  for (const [from, edges] of machine.transitions.entries()) {
+    transitions.set(
+      from,
+      edges.map((edge) => ({ symbol: edge.symbol, to: edge.to }))
+    );
+  }
+
+  return {
+    ...machine,
+    states: [...machine.states],
+    accepts: new Set(machine.accepts),
+    transitions,
+    alphabet: new Set(machine.alphabet),
+    stateSubsets: machine.stateSubsets
+      ? new Map(
+          [...machine.stateSubsets.entries()].map(([id, subset]) => [id, new Set(subset)])
+        )
+      : undefined,
+  };
+}
+
+function formatStateSet(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return `{${sorted.map((v) => `q${v}`).join(", ")}}`;
+}
+
+function getSubsetLabel(machine, stateId) {
+  if (!machine.stateSubsets || !machine.stateSubsets.has(stateId)) {
+    return `q${stateId}`;
+  }
+  return formatStateSet(machine.stateSubsets.get(stateId));
 }
 
 function isSymbolToken(t) {
@@ -128,6 +180,7 @@ function buildNfaFromRegex(regex) {
   let nextId = 0;
   const transitions = new Map();
   const alphabet = new Set();
+  const steps = [];
 
   function newState() {
     const id = nextId;
@@ -141,13 +194,50 @@ function buildNfaFromRegex(regex) {
     if (symbol !== EPSILON) alphabet.add(symbol);
   }
 
+  function snapshotMachine(fragment) {
+    const states = Array.from({ length: nextId }, (_, i) => i);
+    return {
+      type: "NFA",
+      start: fragment ? fragment.start : 0,
+      accepts: new Set(fragment ? [fragment.accept] : []),
+      states,
+      transitions,
+      alphabet,
+    };
+  }
+
+  function recordStep(title, description, token, fragment) {
+    steps.push({
+      phase: "nfa",
+      title,
+      description,
+      token,
+      machine: cloneMachine(snapshotMachine(fragment)),
+    });
+  }
+
   const stack = [];
+  steps.push({
+    phase: "nfa",
+    title: "Parse Regex",
+    description: `Converted infix regex to postfix notation: ${postfix.join(" ")}`,
+    token: "postfix",
+    machine: null,
+  });
+
   for (const token of postfix) {
     if (isSymbolToken(token)) {
       const s = newState();
       const e = newState();
       addTransition(s, token, e);
-      stack.push({ start: s, accept: e });
+      const fragment = { start: s, accept: e };
+      stack.push(fragment);
+      recordStep(
+        `Create fragment for "${token}"`,
+        `Made a basic NFA fragment with a single transition ${token} from q${s} to q${e}.`,
+        token,
+        fragment
+      );
       continue;
     }
 
@@ -156,7 +246,14 @@ function buildNfaFromRegex(regex) {
       const a = stack.pop();
       if (!a || !b) throw new Error("Invalid regex structure.");
       addTransition(a.accept, EPSILON, b.start);
-      stack.push({ start: a.start, accept: b.accept });
+      const fragment = { start: a.start, accept: b.accept };
+      stack.push(fragment);
+      recordStep(
+        "Apply concatenation",
+        `Connected q${a.accept} to q${b.start} with ${EPSILON}, chaining the two fragments into one.`,
+        token,
+        fragment
+      );
       continue;
     }
 
@@ -170,7 +267,14 @@ function buildNfaFromRegex(regex) {
       addTransition(s, EPSILON, b.start);
       addTransition(a.accept, EPSILON, e);
       addTransition(b.accept, EPSILON, e);
-      stack.push({ start: s, accept: e });
+      const fragment = { start: s, accept: e };
+      stack.push(fragment);
+      recordStep(
+        "Apply union",
+        `Created a split from q${s} into both branches and merged them back into q${e}.`,
+        token,
+        fragment
+      );
       continue;
     }
 
@@ -183,7 +287,14 @@ function buildNfaFromRegex(regex) {
       addTransition(s, EPSILON, e);
       addTransition(a.accept, EPSILON, a.start);
       addTransition(a.accept, EPSILON, e);
-      stack.push({ start: s, accept: e });
+      const fragment = { start: s, accept: e };
+      stack.push(fragment);
+      recordStep(
+        "Apply Kleene star",
+        `Added entry, skip, loop, and exit ${EPSILON}-transitions so the fragment can repeat zero or more times.`,
+        token,
+        fragment
+      );
       continue;
     }
 
@@ -195,7 +306,14 @@ function buildNfaFromRegex(regex) {
       addTransition(s, EPSILON, a.start);
       addTransition(a.accept, EPSILON, a.start);
       addTransition(a.accept, EPSILON, e);
-      stack.push({ start: s, accept: e });
+      const fragment = { start: s, accept: e };
+      stack.push(fragment);
+      recordStep(
+        "Apply one-or-more",
+        `Forced one pass through the fragment, then added an ${EPSILON}-loop for repetition.`,
+        token,
+        fragment
+      );
       continue;
     }
 
@@ -207,7 +325,14 @@ function buildNfaFromRegex(regex) {
       addTransition(s, EPSILON, a.start);
       addTransition(s, EPSILON, e);
       addTransition(a.accept, EPSILON, e);
-      stack.push({ start: s, accept: e });
+      const fragment = { start: s, accept: e };
+      stack.push(fragment);
+      recordStep(
+        "Apply optional operator",
+        `Added an ${EPSILON}-skip path so the fragment can be taken once or omitted.`,
+        token,
+        fragment
+      );
       continue;
     }
   }
@@ -218,7 +343,7 @@ function buildNfaFromRegex(regex) {
 
   const fragment = stack[0];
   const states = Array.from({ length: nextId }, (_, i) => i);
-  return {
+  const machine = {
     type: "NFA",
     start: fragment.start,
     accepts: new Set([fragment.accept]),
@@ -226,6 +351,14 @@ function buildNfaFromRegex(regex) {
     transitions,
     alphabet,
   };
+  steps.push({
+    phase: "nfa",
+    title: "Final ε-NFA",
+    description: `Completed Thompson construction with start q${fragment.start} and accept q${fragment.accept}.`,
+    token: "final",
+    machine: cloneMachine(machine),
+  });
+  return { machine, steps, postfix };
 }
 
 function epsilonClosure(nfa, seeds) {
@@ -265,12 +398,33 @@ function convertNfaToDfa(nfa) {
   const dfaStates = [];
   const dfaAccepts = new Set();
   const setById = new Map();
+  const steps = [];
 
   const startSet = epsilonClosure(nfa, new Set([nfa.start]));
   const startKey = setKey(startSet);
   const idByKey = new Map([[startKey, 0]]);
   setById.set(0, startSet);
   dfaStates.push(0);
+
+  function snapshotDfa() {
+    return {
+      type: "DFA",
+      start: 0,
+      accepts: dfaAccepts,
+      states: [...dfaStates],
+      transitions: dfaTransitions,
+      alphabet: nfa.alphabet,
+      stateSubsets: setById,
+    };
+  }
+
+  steps.push({
+    phase: "dfa",
+    title: "Create DFA start state",
+    description: `Computed ε-closure({q${nfa.start}}) = ${formatStateSet(startSet)} and labeled it as q0.`,
+    token: "start",
+    machine: cloneMachine(snapshotDfa()),
+  });
 
   const queue = [0];
   while (queue.length) {
@@ -292,13 +446,27 @@ function convertNfaToDfa(nfa) {
         setById.set(toId, closed);
         dfaStates.push(toId);
         queue.push(toId);
+        steps.push({
+          phase: "dfa",
+          title: `Discover DFA state q${toId}`,
+          description: `From ${getSubsetLabel(snapshotDfa(), fromId)} on "${sym}", move then take ε-closure to get ${formatStateSet(closed)}.`,
+          token: sym,
+          machine: cloneMachine(snapshotDfa()),
+        });
       }
       if (!dfaTransitions.has(fromId)) dfaTransitions.set(fromId, []);
       dfaTransitions.get(fromId).push({ symbol: sym, to: toId });
+      steps.push({
+        phase: "dfa",
+        title: `Add transition on "${sym}"`,
+        description: `Mapped ${getSubsetLabel(snapshotDfa(), fromId)} --${sym}--> ${getSubsetLabel(snapshotDfa(), toId)}.`,
+        token: sym,
+        machine: cloneMachine(snapshotDfa()),
+      });
     }
   }
 
-  return {
+  const machine = {
     type: "DFA",
     start: 0,
     accepts: dfaAccepts,
@@ -307,6 +475,14 @@ function convertNfaToDfa(nfa) {
     alphabet: nfa.alphabet,
     stateSubsets: setById,
   };
+  steps.push({
+    phase: "dfa",
+    title: "Final DFA",
+    description: `Subset construction finished with ${dfaStates.length} DFA states.`,
+    token: "final",
+    machine: cloneMachine(machine),
+  });
+  return { machine, steps };
 }
 
 function simulateNfa(nfa, input) {
@@ -411,15 +587,53 @@ function svgEl(tag, attrs = {}) {
   return node;
 }
 
-function renderMachine(machine) {
-  const svg = els.graphSvg;
+function clearSvg(svg) {
   while (svg.lastChild && svg.lastChild.tagName !== "defs") {
     svg.removeChild(svg.lastChild);
   }
+}
+
+function stopPlayback() {
+  if (state.playbackTimer) {
+    clearTimeout(state.playbackTimer);
+    state.playbackTimer = null;
+  }
+  state.isPlaying = false;
+  els.playStepsBtn.textContent = "Play Steps";
+}
+
+function scheduleNextPlaybackStep() {
+  if (!state.isPlaying) return;
+  state.playbackTimer = setTimeout(() => {
+    if (!state.isPlaying) return;
+    const nextIndex = state.selectedStepIndex + 1;
+    if (nextIndex >= state.constructionSteps.length) {
+      stopPlayback();
+      return;
+    }
+    selectConstructionStep(nextIndex);
+    scheduleNextPlaybackStep();
+  }, state.playbackDelay);
+}
+
+function startPlayback() {
+  if (!state.constructionSteps.length) return;
+  if (state.selectedStepIndex >= state.constructionSteps.length - 1) {
+    selectConstructionStep(0);
+  }
+  stopPlayback();
+  state.isPlaying = true;
+  els.playStepsBtn.textContent = "Playing...";
+  scheduleNextPlaybackStep();
+}
+
+function renderMachine(machine, svg = els.graphSvg, options = {}) {
+  const { arrowId = "arrow", compact = false } = options;
+  clearSvg(svg);
 
   const positions = layoutStates(machine);
   const edgeGroups = buildEdgeGroups(machine);
-  const radius = 24;
+  const radius = compact ? 20 : 24;
 
   for (const [pair, labels] of edgeGroups.entries()) {
     const [fromRaw, toRaw] = pair.split("->");
@@ -434,7 +648,7 @@ function renderMachine(machine) {
         C ${fromPos.x - 36} ${fromPos.y - 64}, ${fromPos.x + 36} ${
           fromPos.y - 64
         }, ${fromPos.x} ${fromPos.y - radius}`;
-      svg.appendChild(svgEl("path", { d: loopPath }));
+      svg.appendChild(svgEl("path", { d: loopPath, "marker-end": `url(#${arrowId})` }));
       svg.appendChild(
         svgEl("text", {
           x: fromPos.x,
@@ -463,7 +677,7 @@ function renderMachine(machine) {
     const cy = my + ny * curve;
     const d = `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`;
 
-    svg.appendChild(svgEl("path", { d }));
+    svg.appendChild(svgEl("path", { d, "marker-end": `url(#${arrowId})` }));
     svg.appendChild(
       svgEl("text", {
         x: cx,
@@ -521,9 +735,87 @@ function renderMachine(machine) {
           y1: pos.y,
           x2: pos.x - radius - 2,
           y2: pos.y,
+          "marker-end": `url(#${arrowId})`,
         })
       );
     }
+  }
+}
+
+function renderConstructionSteps(steps) {
+  stopPlayback();
+  state.constructionSteps = steps;
+  state.selectedStepIndex = Math.max(0, steps.length - 1);
+  els.stepSummary.textContent = `${steps.length} steps recorded`;
+  els.stepList.textContent = "";
+  els.stepActions.style.display = "none";
+  els.playbackControls.style.display = steps.length ? "flex" : "none";
+
+  const fragment = document.createDocumentFragment();
+  steps.forEach((step, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `step-card${index === state.selectedStepIndex ? " active" : ""}`;
+
+    const title = document.createElement("h3");
+    title.textContent = `${index + 1}. ${step.title}`;
+
+    const description = document.createElement("p");
+    description.textContent = step.description;
+
+    const meta = document.createElement("div");
+    meta.className = "step-meta";
+
+    const phase = document.createElement("span");
+    phase.className = "pill";
+    phase.textContent = step.phase.toUpperCase();
+    meta.appendChild(phase);
+
+    if (step.token) {
+      const token = document.createElement("span");
+      token.className = "pill";
+      token.textContent = `Token: ${step.token}`;
+      meta.appendChild(token);
+    }
+
+    card.appendChild(title);
+    card.appendChild(description);
+    card.appendChild(meta);
+    card.addEventListener("click", () => selectConstructionStep(index));
+    fragment.appendChild(card);
+  });
+
+  els.stepList.appendChild(fragment);
+  selectConstructionStep(state.selectedStepIndex);
+}
+
+function selectConstructionStep(index) {
+  state.selectedStepIndex = index;
+  [...els.stepList.children].forEach((node, idx) => {
+    node.classList.toggle("active", idx === index);
+    if (idx === index) {
+      node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+
+  const step = state.constructionSteps[index];
+  if (!step) {
+    els.stepTitle.textContent = "Step Preview";
+    els.stepDescription.textContent = "No construction data available.";
+    els.stepActions.style.display = "flex";
+    els.playbackControls.style.display = "none";
+    clearSvg(els.stepSvg);
+    return;
+  }
+
+  els.stepTitle.textContent = step.title;
+  els.stepDescription.textContent = step.description;
+  els.stepActions.style.display = step.machine ? "none" : "flex";
+  els.playbackControls.style.display = state.constructionSteps.length ? "flex" : "none";
+  clearSvg(els.stepSvg);
+
+  if (step.machine) {
+    renderMachine(step.machine, els.stepSvg, { arrowId: "stepArrow", compact: true });
   }
 }
 
@@ -544,23 +836,36 @@ function buildMachine(type) {
   }
 
   try {
-    state.nfa = buildNfaFromRegex(regex);
+    const nfaBuild = buildNfaFromRegex(regex);
+    state.nfa = nfaBuild.machine;
     if (type === "nfa") {
       state.currentMachine = state.nfa;
       state.machineType = "ε-NFA";
       renderMachine(state.currentMachine);
       updateStats(state.currentMachine, state.machineType);
+      renderConstructionSteps(nfaBuild.steps);
       setStatus("Built ε-NFA successfully.");
       return;
     }
 
-    state.dfa = convertNfaToDfa(state.nfa);
+    const dfaBuild = convertNfaToDfa(state.nfa);
+    state.dfa = dfaBuild.machine;
     state.currentMachine = state.dfa;
     state.machineType = "DFA";
     renderMachine(state.currentMachine);
     updateStats(state.currentMachine, state.machineType);
+    renderConstructionSteps([...nfaBuild.steps, ...dfaBuild.steps]);
     setStatus("Built DFA using subset construction.");
   } catch (err) {
+    stopPlayback();
+    state.constructionSteps = [];
+    els.stepList.textContent = "";
+    els.stepSummary.textContent = "No construction yet.";
+    els.stepTitle.textContent = "Step Preview";
+    els.stepDescription.textContent = "Build an automaton to inspect its construction process.";
+    els.stepActions.style.display = "flex";
+    els.playbackControls.style.display = "none";
+    clearSvg(els.stepSvg);
     setStatus(err.message || "Failed to build automaton.", true);
   }
 }
@@ -613,6 +918,17 @@ function runSimulation() {
 
 els.buildNfaBtn.addEventListener("click", () => buildMachine("nfa"));
 els.buildDfaBtn.addEventListener("click", () => buildMachine("dfa"));
+els.showNfaStepsBtn.addEventListener("click", () => buildMachine("nfa"));
+els.showDfaStepsBtn.addEventListener("click", () => buildMachine("dfa"));
+els.playStepsBtn.addEventListener("click", startPlayback);
+els.stopStepsBtn.addEventListener("click", stopPlayback);
+els.speedSelect.addEventListener("change", (event) => {
+  state.playbackDelay = Number(event.target.value);
+  if (state.isPlaying) {
+    stopPlayback();
+    startPlayback();
+  }
+});
 els.simulateBtn.addEventListener("click", runSimulation);
 els.regexInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") buildMachine("nfa");

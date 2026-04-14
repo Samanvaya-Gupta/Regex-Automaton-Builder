@@ -217,15 +217,28 @@ code {
   background: linear-gradient(180deg, #f8fffd, #f7fbff);
 }
 
+#stepSvg {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #ccdde1;
+  background: linear-gradient(180deg, #fffdf8, #fbfeff);
+}
+
 #graphSvg path,
-#graphSvg line {
+#graphSvg line,
+#stepSvg path,
+#stepSvg line {
   stroke: #48636f;
   stroke-width: 1.8;
   fill: none;
-  marker-end: url(#arrow);
 }
 
 #graphSvg marker path {
+  fill: #48636f;
+  stroke: none;
+}
+
+#stepSvg path.marker-shape {
   fill: #48636f;
   stroke: none;
 }
@@ -236,7 +249,18 @@ code {
   stroke-width: 2;
 }
 
+#stepSvg .state {
+  fill: #ffffff;
+  stroke: #4e6a77;
+  stroke-width: 2;
+}
+
 #graphSvg .state.accept {
+  stroke: #1b9aaa;
+  stroke-width: 3;
+}
+
+#stepSvg .state.accept {
   stroke: #1b9aaa;
   stroke-width: 3;
 }
@@ -245,9 +269,21 @@ code {
   fill: #ecfcfa;
 }
 
+#stepSvg .state.start {
+  fill: #fff3e2;
+}
+
 #graphSvg .state-label {
   font-family: "IBM Plex Mono", monospace;
   font-size: 14px;
+  fill: #193240;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+#stepSvg .state-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
   fill: #193240;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -261,6 +297,142 @@ code {
   stroke: #f8fffd;
   stroke-width: 3;
   text-anchor: middle;
+}
+
+#stepSvg .edge-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  fill: #243f4f;
+  paint-order: stroke;
+  stroke: #fffdf8;
+  stroke-width: 3;
+  text-anchor: middle;
+}
+
+.steps-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+#stepSummary {
+  color: #456679;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.84rem;
+}
+
+.step-list {
+  display: grid;
+  gap: 10px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.step-card {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  border: 1px solid #c7d8dc;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.step-card:hover {
+  transform: translateY(-1px);
+  border-color: #91bcc4;
+  box-shadow: 0 10px 24px -20px #1c2f3f;
+}
+
+.step-card.active {
+  border-color: #0d8b8b;
+  background: linear-gradient(180deg, #f5fffd, #fffdfa);
+}
+
+.step-card h3 {
+  margin: 0 0 5px;
+  font-size: 0.95rem;
+}
+
+.step-card p {
+  margin: 0;
+  color: #486171;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.step-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.pill {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #edf7f7;
+  color: #24525e;
+}
+
+.step-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.step-preview-copy {
+  border: 1px solid #d5e3e6;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.step-preview-copy h3 {
+  margin: 0 0 6px;
+}
+
+.step-preview-copy p {
+  margin: 0;
+  color: #486171;
+}
+
+.step-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.playback-controls {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #dbe8eb;
+}
+
+.speed-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.speed-control select {
+  border: 1px solid #b7ccd4;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
 }
 
 .results {
@@ -318,5 +490,17 @@ code {
 
   #graphSvg {
     min-height: 460px;
+  }
+
+  .steps-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .step-list {
+    max-height: 320px;
+  }
+
+  #stepSvg {
+    min-height: 340px;
   }
 }
